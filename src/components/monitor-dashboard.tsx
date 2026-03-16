@@ -100,6 +100,7 @@ const timeframeOptions: Array<{ value: Timeframe; label: string }> = [
   { value: "24h", label: "24 小时" },
   { value: "7d", label: "7 天" },
   { value: "30d", label: "30 天" },
+  { value: "1y", label: "1 年" },
 ];
 
 const loadingPhases = [
@@ -117,8 +118,6 @@ const initialForm: FormState = {
   note: "",
   manualSignals: "",
 };
-
-const MAX_BATCH_CHAT_REPORTS = 12;
 
 function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -187,6 +186,7 @@ function buildAttachmentPrompt(
     `工作表：${batch.sheetName}`,
     `读取主题列：${batch.topicColumnLabel}`,
     `行范围：${config.dataStartRow} - ${config.dataEndRow}`,
+    "检索时间窗：近 1 年",
     `待处理主题：${batch.rows.length}`,
     `结果写回起始列：${batch.resultStartColumn}`,
   ];
@@ -972,7 +972,7 @@ export default function MonitorDashboard() {
 
     let successCount = 0;
     let failedCount = 0;
-    let hiddenSuccessCount = 0;
+    const failedTopics: string[] = [];
 
     try {
       prepareWorkbookWriteback(
@@ -990,7 +990,12 @@ export default function MonitorDashboard() {
 
         try {
           const report = await createBrowserMonitorReport(
-            buildMonitorRequestFromImportedRow(row, defaults, attachmentConfig.taskPrompt),
+            buildMonitorRequestFromImportedRow(
+              row,
+              { ...defaults, timeframe: "1y" },
+              attachmentConfig.taskPrompt,
+              "1y",
+            ),
           );
 
           writeMonitorResultToWorkbook(
@@ -1002,19 +1007,11 @@ export default function MonitorDashboard() {
           );
 
           successCount += 1;
-
-          if (index < MAX_BATCH_CHAT_REPORTS) {
-            appendAssistantMessage(
-              `${report.executiveSummary}\n\n${report.reportLead}`,
-              report,
-            );
-          } else {
-            hiddenSuccessCount += 1;
-          }
         } catch (batchError) {
           failedCount += 1;
           const message =
             batchError instanceof Error ? batchError.message : "监测失败";
+          failedTopics.push(`${row.topic}：${message}`);
 
           writeMonitorResultToWorkbook(
             workbookRuntimeRef.current.XLSX,
@@ -1035,12 +1032,6 @@ export default function MonitorDashboard() {
         }
       }
 
-      if (hiddenSuccessCount > 0) {
-        appendAssistantMessage(
-          `另有 ${hiddenSuccessCount} 个主题已完成监测并写回附件。为避免页面一次性渲染过多报告卡片，这部分结果没有逐条展开，但已经包含在导出文件里。`,
-        );
-      }
-
       const summary = createWritebackSummary(
         attachmentMeta.fileName,
         attachmentBatch,
@@ -1049,6 +1040,18 @@ export default function MonitorDashboard() {
       );
 
       setWritebackSummary(summary);
+      appendAssistantMessage(
+        [
+          `批量任务已完成，按近 1 年时间窗处理 ${attachmentBatch.rows.length} 个主体。`,
+          `成功写回 ${successCount} 行，失败 ${failedCount} 行。`,
+          `结果已写入附件内存副本，从 ${attachmentBatch.resultStartColumn} 列开始，可直接点击“导出写回附件”下载。`,
+          failedTopics.length > 0
+            ? `失败样本：${failedTopics.slice(0, 6).join("；")}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
       setStatusNote(
         `批量任务已完成，成功 ${successCount} 个主题，失败 ${failedCount} 个主题。结果已写回内存中的附件，点击“导出写回附件”即可下载。`,
       );
@@ -1277,6 +1280,9 @@ export default function MonitorDashboard() {
 
                     <div className={styles.importFinePrint}>
                       推荐列名：{IMPORT_TEMPLATE_COLUMNS.join(" / ")}。大文件会按你指定的列和行范围读取，避免一次性把整张表渲染到页面里。
+                    </div>
+                    <div className={styles.inlineNotice}>
+                      当前公开版实时检索仍以 Google News / Bing 等公开资讯为主。企查查 OpenAPI、Wind API、企业预警通、DealingMatrix 这类授权源需要服务端密钥或企业终端支持，不能安全地直接挂在 GitHub Pages 前端里。
                     </div>
 
                     {attachmentMeta ? (

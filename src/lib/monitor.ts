@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 
 export type FocusArea = "brand" | "crisis" | "campaign" | "competitor";
-export type Timeframe = "24h" | "7d" | "30d";
+export type Timeframe = "24h" | "7d" | "30d" | "1y";
 
 export interface MonitorRequest {
   topic: string;
@@ -166,6 +166,7 @@ const TIMEFRAME_HOURS: Record<Timeframe, number> = {
   "24h": 24,
   "7d": 24 * 7,
   "30d": 24 * 30,
+  "1y": 24 * 365,
 };
 
 function decodeHtmlEntities(value: string) {
@@ -240,6 +241,13 @@ function formatBucket(date: Date, timeframe: Timeframe) {
     }).format(date);
   }
 
+  if (timeframe === "1y") {
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "2-digit",
+      timeZone: "Asia/Shanghai",
+    }).format(date);
+  }
+
   return new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
     day: "2-digit",
@@ -287,7 +295,14 @@ function buildQueries(input: MonitorRequest) {
           ? " 传播 活动 热度"
           : " 声量 口碑";
 
-  const googleRecency = input.timeframe === "24h" ? " when:1d" : input.timeframe === "7d" ? " when:7d" : " when:30d";
+  const googleRecency =
+    input.timeframe === "24h"
+      ? " when:1d"
+      : input.timeframe === "7d"
+        ? " when:7d"
+        : input.timeframe === "30d"
+          ? " when:30d"
+          : " when:365d";
   const queries = [
     `${baseKeywords.join(" ")}${focusHint}`,
     `${input.topic} 新闻 舆论${focusHint}`,
@@ -435,7 +450,7 @@ async function collectPublicSignals(input: MonitorRequest, mode: FeedMode) {
       (left, right) =>
         safeDate(right.publishedAt).getTime() - safeDate(left.publishedAt).getTime(),
     )
-    .slice(0, 16);
+    .slice(0, mode === "proxy" && input.timeframe === "1y" ? 24 : 16);
 }
 
 function parseManualSignals(raw: string | undefined) {

@@ -117,13 +117,13 @@ export const IMPORT_TEMPLATE_COLUMNS = [
 ] as const;
 
 export const RESULT_HEADERS = [
-  "舆情任务状态",
+  "写回状态",
+  "近一年舆情摘要",
   "风险等级",
-  "风险评分",
   "情绪判断",
   "高频主题",
-  "监测摘要",
-  "建议动作",
+  "主要来源",
+  "最新信号时间",
   "写入时间",
 ] as const;
 
@@ -286,6 +286,15 @@ function parseTimeframe(value: string): Timeframe | undefined {
     normalized.includes("1月")
   ) {
     return "30d";
+  }
+
+  if (
+    normalized.includes("1y") ||
+    normalized.includes("365d") ||
+    normalized.includes("一年") ||
+    normalized.includes("1年")
+  ) {
+    return "1y";
   }
 
   return undefined;
@@ -755,12 +764,13 @@ export function buildMonitorRequestFromImportedRow(
   row: ImportedTopicRow,
   defaults: ImportDefaults,
   taskPrompt = "",
+  forcedTimeframe?: Timeframe,
 ): MonitorRequest {
   return {
     topic: row.topic,
     keywords: parseKeywordInput(row.keywordsText || defaults.keywords),
     focus: row.focus ?? defaults.focus,
-    timeframe: row.timeframe ?? defaults.timeframe,
+    timeframe: forcedTimeframe ?? row.timeframe ?? defaults.timeframe,
     note: buildMergedTaskNote(row.note, taskPrompt, defaults.note) || undefined,
     manualSignals: row.manualSignals || defaults.manualSignals,
   };
@@ -803,18 +813,34 @@ export function writeMonitorResultToWorkbook(
 ) {
   const worksheet = workbook.Sheets[batch.sheetName];
   const startColumnIndex = XLSX.utils.decode_col(batch.resultStartColumn);
-  const summary = report
-    ? `${report.executiveSummary} ${report.reportLead}`.trim()
-    : errorText;
+  const latestHighlight = report?.highlights[0];
+  const latestSignalTime = latestHighlight?.publishedAt
+    ? new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "Asia/Shanghai",
+      }).format(new Date(latestHighlight.publishedAt))
+    : "";
+  const sourceSummary = report
+    ? report.sources
+        .slice(0, 4)
+        .map((source) => `${source.name}${source.count > 1 ? `×${source.count}` : ""}`)
+        .join(" / ")
+    : "";
+  const summary = report ? report.executiveSummary.trim() : errorText;
   const values = report
     ? [
         "已完成",
+        summary,
         report.riskLevel,
-        report.riskScore,
         report.sentiment.label,
         report.topThemes.slice(0, 4).join(" / "),
-        summary,
-        report.actions.slice(0, 3).join("；"),
+        sourceSummary,
+        latestSignalTime,
         new Intl.DateTimeFormat("zh-CN", {
           year: "numeric",
           month: "2-digit",
@@ -827,11 +853,11 @@ export function writeMonitorResultToWorkbook(
       ]
     : [
         "失败",
-        "",
-        "",
-        "",
-        "",
         summary,
+        "",
+        "",
+        "",
+        "",
         "",
         new Intl.DateTimeFormat("zh-CN", {
           year: "numeric",
