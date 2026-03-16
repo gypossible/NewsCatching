@@ -1,0 +1,82 @@
+# 舆情监测助手
+
+这是一个基于公开 Minimax expert 配置复刻出来的舆情监测工作台，核心能力包括：
+
+- 主题与关键词监测
+- 热点追踪与情绪判断
+- 风险评分与行动建议
+- 新闻分析员 / 社媒监测员 / 报告总控 三段式输出
+
+当前版本不依赖任何私有 API Key，默认通过公开新闻 RSS 抓取信号，并支持你手工粘贴微博、小红书、评论区、客服记录等补充线索。
+
+## 技术栈
+
+- Next.js 16
+- React 19
+- TypeScript
+- `fast-xml-parser` 用于解析 RSS
+
+## 本地运行
+
+```bash
+npm install
+npm run dev
+```
+
+打开 [http://localhost:3000](http://localhost:3000) 即可。
+
+## 已实现功能
+
+- 左侧监测任务配置面板
+- 右侧多角色 Agent 工作台
+- `POST /api/monitor` 监测接口
+- Google News RSS + Bing News RSS 公开信号抓取
+- 手工补充信号融合
+- 结构化快报、风险等级、情绪分布、来源分布、时间走势
+
+## 目录结构
+
+```text
+src/
+  app/
+    api/monitor/route.ts      # 监测接口
+    layout.tsx                # 全局布局与字体
+    page.tsx                  # 入口页面
+  components/
+    monitor-dashboard.tsx     # 主工作台 UI
+    monitor-dashboard.module.css
+  lib/
+    agent-config.ts           # Agent 设定与预置任务
+    monitor.ts                # RSS 抓取、分析与报告生成
+```
+
+## 使用建议
+
+1. 在“监测主题”中输入品牌、人物、产品或事件名。
+2. 在“关键词补充”里加入 3 到 6 个高相关词。
+3. 如果你已经有微博评论、论坛帖子或客服工单，直接粘贴到“手工补充信号”。
+4. 点击“启动监测任务”，即可生成一轮快报。
+
+手工补充信号建议格式：
+
+```text
+[微博] 用户吐槽新品断货
+[小红书] 评论区对包装设计评价两极
+[客服] 今日关于配送时效的咨询量增加
+```
+
+## 校验
+
+以下命令已通过：
+
+```bash
+npm run lint
+npm run build
+```
+
+## 后续可扩展方向
+
+- 接入微博 / 小红书 / 抖音 / B 站等真实数据源
+- 增加定时任务与日报导出
+- 增加登录、项目空间和历史任务归档
+- 接入真实大模型，对报告进行更自然的归纳与问答
