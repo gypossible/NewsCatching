@@ -190,6 +190,19 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function shortenText(value: string | undefined, maxLength = 36) {
+  const normalized = normalizeText(value ?? "");
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
 function toArray<T>(value: T | T[] | undefined | null): T[] {
   if (!value) {
     return [];
@@ -570,10 +583,11 @@ function buildExecutiveSummary(
 
   const latest = signals[0];
   const themeText = themes.slice(0, 4).join(" / ") || input.topic;
+  const noteText = shortenText(input.note);
 
   return `围绕“${input.topic}”已汇总 ${signals.length} 条信号，当前以“${themeText}”为主要讨论面向，情绪判断为“${sentiment.label}”，综合风险等级为 ${riskLevel}。最新一条高相关信号来自 ${latest.source}（${formatDate(
     safeDate(latest.publishedAt),
-  )}）。`;
+  )}）。${noteText ? `本轮任务要求聚焦“${noteText}”。` : ""}`;
 }
 
 function buildNewsDesk(signals: MonitorSignal[], sources: Array<{ name: string; count: number }>) {
@@ -619,8 +633,9 @@ function buildReportLead(
 ) {
   const focusLabel = FOCUS_LABELS[input.focus];
   const themeText = themes.slice(0, 3).join("、") || input.topic;
+  const noteText = shortenText(input.note, 28);
 
-  return `${focusLabel}视角下，当前舆情风险评分为 ${riskScore}/100，判定为 ${riskLevel} 风险。建议围绕 ${themeText} 建立后续 watchlist，并重点盯住负向占比 ${sentiment.negative}% 的来源与触发语境。`;
+  return `${focusLabel}视角下，当前舆情风险评分为 ${riskScore}/100，判定为 ${riskLevel} 风险。建议围绕 ${themeText} 建立后续 watchlist，并重点盯住负向占比 ${sentiment.negative}% 的来源与触发语境。${noteText ? `输出已优先响应“${noteText}”这一任务要求。` : ""}`;
 }
 
 function buildActions(
@@ -647,6 +662,10 @@ function buildActions(
 
   if (!signals.some((signal) => signal.channel === "manual")) {
     actions.push("补充评论区、客服记录或社区帖子，可显著提升社媒判断准确度。");
+  }
+
+  if (input.note?.trim()) {
+    actions.push(`按“${shortenText(input.note, 24)}”复核本轮报告重点与结果写回内容。`);
   }
 
   return actions.slice(0, 5);
@@ -706,8 +725,8 @@ async function createMonitorReportWithMode(
     highlights: signals.slice(0, 6),
     coverageNote:
       manualSignals.length > 0
-        ? "本次报告已融合公开新闻 RSS 与手工补充的社媒/论坛线索。"
-        : "本次报告仅基于公开新闻 RSS 生成；如需更接近真实舆情，请粘贴微博、小红书或客服记录片段。",
+        ? `本次报告已融合公开新闻 RSS 与手工补充的社媒/论坛线索。${input.note?.trim() ? `任务要求：${shortenText(input.note, 40)}。` : ""}`
+        : `本次报告仅基于公开新闻 RSS 生成；如需更接近真实舆情，请粘贴微博、小红书或客服记录片段。${input.note?.trim() ? `任务要求：${shortenText(input.note, 40)}。` : ""}`,
   };
 }
 

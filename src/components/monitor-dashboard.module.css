@@ -225,7 +225,8 @@
 }
 
 .input,
-.textarea {
+.textarea,
+.select {
   width: 100%;
   border: 1px solid rgba(19, 50, 56, 0.1);
   border-radius: 18px;
@@ -243,6 +244,12 @@
   padding: 0 16px;
 }
 
+.select {
+  min-height: 54px;
+  padding: 0 16px;
+  appearance: none;
+}
+
 .textarea {
   min-height: 118px;
   padding: 14px 16px;
@@ -251,11 +258,27 @@
 }
 
 .input:focus,
-.textarea:focus {
+.textarea:focus,
+.select:focus {
   outline: none;
   transform: translateY(-1px);
   border-color: rgba(42, 132, 118, 0.46);
   box-shadow: 0 0 0 6px rgba(42, 132, 118, 0.12);
+}
+
+.fieldPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.inlineNotice {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(17, 62, 71, 0.08);
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.55;
 }
 
 .importPanel {
@@ -563,6 +586,131 @@
 
 .errorText {
   color: #b44526;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 26, 31, 0.46);
+  backdrop-filter: blur(10px);
+}
+
+.modalCard {
+  width: min(1180px, 100%);
+  max-height: min(92vh, 980px);
+  overflow: auto;
+  border-radius: 30px;
+  border: 1px solid rgba(19, 50, 56, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(247, 255, 252, 0.98)),
+    rgba(255, 255, 255, 0.95);
+  box-shadow: 0 30px 80px rgba(7, 28, 33, 0.22);
+}
+
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 24px 24px 0;
+}
+
+.modalTitle {
+  margin: 12px 0 6px;
+  font-size: clamp(1.4rem, 2vw, 2rem);
+  line-height: 1.05;
+}
+
+.modalDescription {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.65;
+}
+
+.modalClose {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(19, 50, 56, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+.modalGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 18px;
+  padding: 24px;
+}
+
+.modalPanel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.modalStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.previewSheet {
+  display: grid;
+  gap: 10px;
+}
+
+.previewSheetRow {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.previewSheetIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 134, 71, 0.12);
+  color: #bf5b2c;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.previewSheetCells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.previewSheetCell {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: rgba(17, 62, 71, 0.08);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.modalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .helperPanel {
@@ -1217,7 +1365,9 @@
   .heroTop,
   .analysisGrid,
   .stackGrid,
-  .metrics {
+  .metrics,
+  .modalGrid,
+  .fieldPair {
     grid-template-columns: 1fr;
   }
 
@@ -1232,6 +1382,19 @@
 
 @media (max-width: 820px) {
   .shell {
+    padding: 16px;
+  }
+
+  .modalOverlay {
+    padding: 12px;
+  }
+
+  .modalCard {
+    border-radius: 22px;
+  }
+
+  .modalHeader,
+  .modalGrid {
     padding: 16px;
   }
 
@@ -1278,9 +1441,11 @@
   }
 
   .buttonCluster,
+  .modalActions,
   .secondaryButton,
   .ghostButton,
-  .uploadButton {
+  .uploadButton,
+  .modalClose {
     width: 100%;
   }
 
