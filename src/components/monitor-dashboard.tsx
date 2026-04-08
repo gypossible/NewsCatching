@@ -1227,6 +1227,9 @@ export default function MonitorDashboard() {
                         <p className={styles.importDescription}>
                           上传后会弹出任务设置对话框。你可以指定读取某一列作为主题，设置任务要求描述，把监测结果写回指定列，并导出下载更新后的附件。
                         </p>
+                        <p className={styles.inlineNotice}>
+                          当前公开版会优先匹配 Google News RSS 里的新浪财经相关公开来源，并结合主体名、简称、关键词过滤负面/风险信号；企查查、Wind、企业预警通、DealingMatrix 这类授权源仍需要服务端接入。
+                        </p>
                       </div>
                       <div className={styles.buttonCluster}>
                         <label

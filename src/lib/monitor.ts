@@ -98,6 +98,29 @@ const NEGATIVE_TERMS = [
   "举报",
   "召回",
   "质疑",
+  "诉讼",
+  "仲裁",
+  "立案",
+  "失信",
+  "违约",
+  "欠薪",
+  "欠款",
+  "亏损",
+  "爆雷",
+  "冻结",
+  "查封",
+  "退市",
+  "跌停",
+  "停牌",
+  "债务",
+  "逾期",
+  "破产",
+  "停工",
+  "减持",
+  "爆仓",
+  "造假",
+  "侵权",
+  "偷税",
 ];
 
 const RISK_TERMS = [
@@ -118,6 +141,41 @@ const RISK_TERMS = [
   "泄露",
   "火灾",
   "伤亡",
+  "诉讼",
+  "仲裁",
+  "立案",
+  "违约",
+  "失信",
+  "欠薪",
+  "欠款",
+  "债务",
+  "逾期",
+  "破产",
+  "停牌",
+  "退市",
+  "冻结",
+  "查封",
+  "造假",
+];
+
+const SINA_NEGATIVE_HINTS = ["处罚", "诉讼", "风险", "投诉"];
+
+const COMPANY_SUFFIXES = [
+  "集团股份有限公司",
+  "股份有限公司",
+  "有限责任公司",
+  "控股集团有限公司",
+  "控股集团",
+  "投资控股有限公司",
+  "投资控股",
+  "集团有限公司",
+  "有限公司",
+  "集团公司",
+  "集团",
+  "控股",
+  "科技",
+  "实业",
+  "发展",
 ];
 
 const TOKEN_STOPWORDS = new Set([
@@ -185,6 +243,10 @@ function decodeHtmlEntities(value: string) {
 
 function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -267,6 +329,28 @@ function extractDomain(url?: string) {
   }
 }
 
+function prettifySourceName(name: string, link?: string) {
+  const domain = extractDomain(link);
+
+  if (name.includes("新浪财经") || domain.includes("finance.sina.com.cn")) {
+    return "新浪财经";
+  }
+
+  if (domain.includes("cj.sina.com.cn")) {
+    return "新浪财经";
+  }
+
+  if (domain.includes("k.sina.com.cn")) {
+    return "新浪看点";
+  }
+
+  if (domain.includes("sina.com.cn")) {
+    return "新浪";
+  }
+
+  return name;
+}
+
 function classifySentiment(text: string) {
   const content = text.toLowerCase();
   const positiveHits = POSITIVE_TERMS.filter((term) => content.includes(term)).length;
@@ -309,9 +393,17 @@ function buildQueries(input: MonitorRequest) {
     `${input.topic} 评论 趋势${focusHint}`,
   ];
 
+  const sinaQueries = [
+    `site:finance.sina.com.cn ${input.topic}${googleRecency}`,
+    ...SINA_NEGATIVE_HINTS.slice(0, 3).map(
+      (hint) => `site:sina.com.cn ${input.topic} ${hint}${googleRecency}`,
+    ),
+  ];
+
   return {
     google: queries.map((query) => `${query}${googleRecency}`),
     bing: queries,
+    sinaGoogle: uniqueStrings(sinaQueries),
   };
 }
 
@@ -321,17 +413,112 @@ function timeframeCutoff(timeframe: Timeframe) {
 
 function pickSourceName(source: unknown, link?: string) {
   if (typeof source === "string" && source.trim()) {
-    return normalizeText(source);
+    return prettifySourceName(normalizeText(source), link);
   }
 
   if (source && typeof source === "object" && "text" in source) {
     const text = String((source as { text?: string }).text ?? "");
     if (text.trim()) {
-      return normalizeText(text);
+      return prettifySourceName(normalizeText(text), link);
     }
   }
 
-  return extractDomain(link);
+  return prettifySourceName(extractDomain(link), link);
+}
+
+function stripTrailingCompanySuffixes(value: string) {
+  let current = value.trim();
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const suffix of COMPANY_SUFFIXES) {
+      if (current.endsWith(suffix)) {
+        current = current.slice(0, -suffix.length).trim();
+        changed = true;
+      }
+    }
+  }
+
+  return current;
+}
+
+function buildEntityAliases(input: MonitorRequest) {
+  const rawSeeds = uniqueStrings([input.topic, ...input.keywords].map((value) => normalizeText(value)));
+  const aliases = new Set<string>();
+
+  for (const seed of rawSeeds) {
+    if (!seed) {
+      continue;
+    }
+
+    const cleaned = seed
+      .replace(/[()（）【】[\]{}]/g, " ")
+      .replace(/[\/|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const fragments = uniqueStrings([
+      cleaned,
+      ...cleaned.split(/[，,、;；]/).map((part) => normalizeText(part)),
+    ]);
+
+    for (const fragment of fragments) {
+      if (!fragment) {
+        continue;
+      }
+
+      aliases.add(fragment);
+
+      const stripped = stripTrailingCompanySuffixes(fragment);
+
+      if (stripped.length >= 2) {
+        aliases.add(stripped);
+      }
+
+      const withoutCountryPrefix = stripped.replace(/^中国/, "").trim();
+      if (withoutCountryPrefix.length >= 2) {
+        aliases.add(withoutCountryPrefix);
+      }
+
+      const bracketTokens = fragment.match(/[A-Za-z]{2,}|\d{4,6}(?:\.[A-Za-z]{2,4})?/g) ?? [];
+      for (const token of bracketTokens) {
+        aliases.add(token);
+      }
+    }
+  }
+
+  return [...aliases]
+    .map((alias) => normalizeText(alias))
+    .filter((alias) => alias.length >= 2)
+    .sort((left, right) => right.length - left.length);
+}
+
+function matchesAlias(text: string, alias: string) {
+  if (!alias) {
+    return false;
+  }
+
+  if (/^[A-Za-z0-9.]+$/.test(alias)) {
+    const pattern = new RegExp(`(^|[^A-Za-z0-9])${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[^A-Za-z0-9])`, "i");
+    return pattern.test(text);
+  }
+
+  return text.includes(alias.toLowerCase());
+}
+
+function countEntityMatches(text: string, aliases: string[]) {
+  const normalized = text.toLowerCase();
+  let hits = 0;
+
+  for (const alias of aliases) {
+    if (matchesAlias(normalized, alias.toLowerCase())) {
+      hits += 1;
+    }
+  }
+
+  return hits;
 }
 
 async function fetchRssFeed(url: string, mode: FeedMode) {
@@ -414,12 +601,19 @@ function parseRssItems(xml: string) {
 }
 
 async function collectPublicSignals(input: MonitorRequest, mode: FeedMode) {
-  const { google, bing } = buildQueries(input);
+  const { google, bing, sinaGoogle } = buildQueries(input);
+  const aliases = buildEntityAliases(input);
 
-  const urls = google.map(
-    (query) =>
-      `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`,
-  );
+  const urls = [
+    ...google.map(
+      (query) =>
+        `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`,
+    ),
+    ...sinaGoogle.map(
+      (query) =>
+        `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`,
+    ),
+  ];
 
   if (mode === "direct") {
     urls.push(
@@ -434,11 +628,18 @@ async function collectPublicSignals(input: MonitorRequest, mode: FeedMode) {
   const cutoff = timeframeCutoff(input.timeframe);
   const seen = new Set<string>();
 
-  return xmlList
+  const signals = xmlList
     .flatMap((xml) => parseRssItems(xml))
     .filter((item) => safeDate(item.publishedAt).getTime() >= cutoff)
     .filter((item) => {
-      const key = normalizeText(item.title).toLowerCase();
+      const entityHits = countEntityMatches(`${item.title} ${item.summary}`, aliases);
+      const sourcePenaltySafe =
+        item.source === "新浪财经" || item.source === "新浪看点" || !item.source.includes("新浪");
+
+      return entityHits > 0 && sourcePenaltySafe;
+    })
+    .filter((item) => {
+      const key = `${normalizeText(item.title).toLowerCase()}|${item.source}`;
       if (seen.has(key)) {
         return false;
       }
@@ -449,8 +650,16 @@ async function collectPublicSignals(input: MonitorRequest, mode: FeedMode) {
     .sort(
       (left, right) =>
         safeDate(right.publishedAt).getTime() - safeDate(left.publishedAt).getTime(),
-    )
-    .slice(0, mode === "proxy" && input.timeframe === "1y" ? 24 : 16);
+    );
+
+  const negativeSignals = signals.filter(
+    (item) => item.sentiment === "negative" || item.riskFlag,
+  );
+
+  return (negativeSignals.length >= 3 ? negativeSignals : signals).slice(
+    0,
+    mode === "proxy" && input.timeframe === "1y" ? 24 : 16,
+  );
 }
 
 function parseManualSignals(raw: string | undefined) {
@@ -740,8 +949,8 @@ async function createMonitorReportWithMode(
     highlights: signals.slice(0, 6),
     coverageNote:
       manualSignals.length > 0
-        ? `本次报告已融合公开新闻 RSS 与手工补充的社媒/论坛线索。${input.note?.trim() ? `任务要求：${shortenText(input.note, 40)}。` : ""}`
-        : `本次报告仅基于公开新闻 RSS 生成；如需更接近真实舆情，请粘贴微博、小红书或客服记录片段。${input.note?.trim() ? `任务要求：${shortenText(input.note, 40)}。` : ""}`,
+        ? `本次报告已融合公开新闻 RSS、新浪财经相关公开来源与手工补充的社媒/论坛线索。${input.note?.trim() ? `任务要求：${shortenText(input.note, 40)}。` : ""}`
+        : `本次报告基于公开新闻 RSS 与新浪财经相关公开来源生成；如需更接近真实舆情，请补充微博、小红书或客服记录片段。${input.note?.trim() ? `任务要求：${shortenText(input.note, 40)}。` : ""}`,
   };
 }
 
